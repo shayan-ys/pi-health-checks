@@ -20,19 +20,26 @@ setup() { setup_pi_health; }
   assert_output --partial "not enabled"
 }
 
-@test "passes with enabled + N peers (mock returns same for both calls)" {
-  # The lone mock returns its programmed output for BOTH `meshnet status`
-  # and `meshnet peer list`. We program output that satisfies both:
-  # - contains "enabled"
-  # - contains 2 lines starting with "Hostname:"
-  mock_set nordvpn $'Meshnet is enabled\nHostname: a.nord\nHostname: b.nord' 0
+@test "fails on unexpected peer-list output" {
+  mock_set nordvpn "some unrelated banner text" 0
+  run run_check check-nordvpn.sh
+  assert_failure
+  assert_output --partial "unexpected output"
+}
+
+@test "passes with This device + N remote peers" {
+  # Real `nordvpn meshnet peer list` prints "This device:" + Hostname for self,
+  # then "Local Peers:" + Hostname per remote peer. Script subtracts self
+  # from the Hostname count.
+  mock_set nordvpn $'This device:\nHostname: self.nord\n\nLocal Peers:\nHostname: a.nord\nHostname: b.nord' 0
   MIN_PEERS=2 run run_check check-nordvpn.sh
   assert_success
   assert_output --partial "peers=2"
 }
 
-@test "fails when peers below MIN_PEERS" {
-  mock_set nordvpn $'Meshnet is enabled\nHostname: a.nord' 0
+@test "fails when remote peers below MIN_PEERS" {
+  mock_set nordvpn $'This device:\nHostname: self.nord\n\nLocal Peers:\nHostname: a.nord' 0
   MIN_PEERS=2 run run_check check-nordvpn.sh
   assert_failure
+  assert_output --partial "peers=1"
 }

@@ -25,9 +25,12 @@ if ! systemctl is-active --quiet argononed.service 2>/dev/null; then
   report_and_exit "$NAME" 1 "argononed.service not active"
 fi
 
-# i2cdetect returns "1a" in its grid when the device is present.
+# i2cdetect returns "1a" in its grid when the device is present. Capture to a
+# variable first so `grep -q` can't close the pipe early and trip pipefail
+# (i2cdetect would exit 141 on SIGPIPE → "not present" false positive).
 addr_short="${I2C_ADDR#0x}"
-if ! i2cdetect -y "$I2C_BUS" 2>/dev/null | grep -qi "\b${addr_short}\b"; then
+i2c_out=$(i2cdetect -y "$I2C_BUS" 2>/dev/null || true)
+if ! echo "$i2c_out" | grep -qiE "(^|[^0-9a-f])${addr_short}([^0-9a-f]|$)"; then
   report_and_exit "$NAME" 1 "I2C ${I2C_ADDR} not present on bus ${I2C_BUS}"
 fi
 report_and_exit "$NAME" 0 "argononed up, I2C ${I2C_ADDR} present"

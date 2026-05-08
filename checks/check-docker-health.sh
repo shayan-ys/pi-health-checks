@@ -17,11 +17,15 @@ if ! docker info >/dev/null 2>&1; then
   report_and_exit "$NAME" 1 "docker daemon unreachable"
 fi
 
-# Find unhealthy or exited containers (excluding "exited (0)" — clean shutdown).
-bad=$(docker ps -a --filter "status=exited" --filter "status=unhealthy" \
+# Docker treats "status" and "health" as separate filter dimensions, so we run
+# two passes and concatenate. `status=unhealthy` is rejected by Docker 24+;
+# unhealthy containers must be queried via `health=unhealthy`.
+exited=$(docker ps -a --filter "status=exited" \
   --format '{{.Names}}\t{{.Status}}' \
-  | awk -F'\t' '$2 !~ /Exited \(0\)/ {print}' \
-  || true)
+  | awk -F'\t' '$2 !~ /Exited \(0\)/ {print}' || true)
+unhealthy=$(docker ps -a --filter "health=unhealthy" \
+  --format '{{.Names}}\t{{.Status}}' || true)
+bad=$(printf '%s\n%s' "$exited" "$unhealthy" | awk 'NF')
 
 if [[ -n "$IGNORE_NAMES" ]]; then
   bad=$(echo "$bad" | grep -Ev "^(${IGNORE_NAMES})\b" || true)

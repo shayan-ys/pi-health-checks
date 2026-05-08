@@ -17,14 +17,20 @@ if ! command -v nordvpn >/dev/null 2>&1; then
   report_and_exit "$NAME" 1 "nordvpn binary not found"
 fi
 
-# `nordvpn meshnet status` returns "Meshnet is enabled" / "Meshnet is disabled".
-status=$(nordvpn meshnet status 2>/dev/null || true)
-if ! echo "$status" | grep -qi "enabled"; then
+# Detection: `nordvpn meshnet peer list` succeeds only when Meshnet is on and
+# the daemon is reachable. NordVPN 4.x removed the `meshnet status` subcommand,
+# so we use peer-list output as a single source of truth.
+peer_out=$(nordvpn meshnet peer list 2>&1 || true)
+if echo "$peer_out" | grep -qiE 'meshnet is (off|disabled|not enabled)|not logged in|daemon is not'; then
   report_and_exit "$NAME" 1 "Meshnet not enabled"
 fi
+if ! echo "$peer_out" | grep -qiE '^This device:|^Hostname:'; then
+  report_and_exit "$NAME" 1 "nordvpn peer list returned unexpected output"
+fi
 
-# Peer count: each peer prints a "Hostname:" line in `peer list`.
-peers=$(nordvpn meshnet peer list 2>/dev/null | grep -c -i '^Hostname:' || true)
+# Peer count: each peer prints a "Hostname:" line. Subtract 1 for "This device".
+total_hosts=$(echo "$peer_out" | grep -ciE '^Hostname:' || true)
+peers=$(( total_hosts > 0 ? total_hosts - 1 : 0 ))
 if [[ "$peers" -lt "$MIN_PEERS" ]]; then
   report_and_exit "$NAME" 1 "peers=${peers} < min=${MIN_PEERS}"
 fi

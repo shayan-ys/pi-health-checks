@@ -1,0 +1,5 @@
+#!/bin/bash
+out_file="$(dirname "$0")/.$(basename "$0").out"
+rc_file="$(dirname "$0")/.$(basename "$0").rc"
+[[ -r "$out_file" ]] && cat "$out_file"
+exit "$(cat "$rc_file" 2>/dev/null || echo 0)"

@@ -24,7 +24,7 @@ log() {
   local name="$1"; shift
   local logfile="${PI_HEALTH_LOG_DIR}/${name}.log"
   if [[ -w "${PI_HEALTH_LOG_DIR}" ]] || mkdir -p "${PI_HEALTH_LOG_DIR}" 2>/dev/null; then
-    printf '%s [%s] %s\n' "$(date -Is)" "$name" "$*" >> "$logfile" 2>/dev/null || true
+    printf '%s [%s] %s\n' "$(date '+%Y-%m-%dT%H:%M:%S')" "$name" "$*" >> "$logfile" 2>/dev/null || true
   fi
 }
 
@@ -55,9 +55,11 @@ report_and_exit() {
   if [[ "$rc" -eq 0 ]]; then
     log "$name" "OK: $msg"
     kuma_push up "$msg"
+    echo "OK: $msg"
   else
     log "$name" "FAIL: $msg"
     kuma_push down "$msg"
+    echo "FAIL: $msg"
   fi
   exit "$rc"
 }

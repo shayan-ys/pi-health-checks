@@ -1,0 +1,7 @@
+*.swp
+.DS_Store
+*.env.example.raw
+tests/integration/.tmp/
+.venv/
+__pycache__/
+.uv-cache/

@@ -91,7 +91,13 @@ done
 # Determine crontab owner per check (root for Pi-specific, $INVOKING_USER for the rest).
 add_cron_line() {
   local user="$1" line="$2"
-  ( crontab -u "$user" -l 2>/dev/null | grep -vF "$line" ; echo "$line" ) | crontab -u "$user" -
+  local tmp
+  tmp="$(mktemp)"
+  crontab -u "$user" -l 2>/dev/null > "$tmp" || true
+  grep -vF "$line" "$tmp" > "${tmp}.new" || true
+  echo "$line" >> "${tmp}.new"
+  crontab -u "$user" - < "${tmp}.new"
+  rm -f "$tmp" "${tmp}.new"
 }
 
 for c in "${CHECKS[@]}"; do

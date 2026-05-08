@@ -29,9 +29,13 @@ rmdir /usr/local/lib/pi-health 2>/dev/null || true
 strip_cron_lines() {
   local user="$1"
   if crontab -u "$user" -l >/dev/null 2>&1; then
+    local tmp
+    tmp="$(mktemp)"
     crontab -u "$user" -l 2>/dev/null \
       | grep -vE '/usr/local/bin/check-(disk|mountpoint|docker-health|nordvpn|dmesg-io|argononed|undervoltage)\.sh' \
-      | crontab -u "$user" -
+      > "$tmp" || true
+    crontab -u "$user" - < "$tmp"
+    rm -f "$tmp"
   fi
 }
 

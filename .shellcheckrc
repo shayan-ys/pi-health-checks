@@ -1,0 +1,3 @@
+shell=bash
+# Source-from-non-constant is fine — we source /etc/pi-health/<name>.env at runtime
+disable=SC1091

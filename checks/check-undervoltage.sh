@@ -1,41 +1,37 @@
-#!/usr/bin/env bash
-# Health check: Pi under-voltage (vcgencmd throttled bit 0).
-# Pushes heartbeat to Uptime Kuma every run. Kuma owns alerting via ntfy.
-set -uo pipefail
+#!/bin/bash
+# check-undervoltage — Pi only. vcgencmd get_throttled bit 0 = currently undervolted.
+#   FAIL_ON_PAST_UNDERVOLT  set to 1 to also fail on bit 16 (occurred since boot)
+#   KUMA_PUSH_URL           optional
+# If running on a non-Pi (no vcgencmd), exits 0 with a "skipped" log line.
 
-KUMA_TOKEN="K8b5uYWdNl9tEnxKuKXPsWE1yIPBYiFH"
-KUMA_URL="http://kuma.example:3001/api/push/${KUMA_TOKEN}"
+set -euo pipefail
+NAME=check-undervoltage
+LIB="$(dirname "$0")/../lib/pi-health.sh"
+[[ -r /usr/local/lib/pi-health/pi-health.sh ]] && LIB=/usr/local/lib/pi-health/pi-health.sh
+# shellcheck source=../lib/pi-health.sh
+. "$LIB"
 
-ERRORS=()
+load_env "$NAME"
+FAIL_ON_PAST_UNDERVOLT="${FAIL_ON_PAST_UNDERVOLT:-0}"
 
-if ! command -v vcgencmd &>/dev/null; then
-  ERRORS+=("vcgencmd missing")
+if ! command -v vcgencmd >/dev/null 2>&1; then
+  log "$NAME" "skipped (vcgencmd not present — not a Pi)"
+  exit 0
+fi
+
+# Output is "throttled=0xNNNN".
+raw=$(vcgencmd get_throttled 2>/dev/null | awk -F= '{print $2}')
+[[ -z "$raw" ]] && report_and_exit "$NAME" 1 "vcgencmd returned empty"
+
+# Bit 0: currently throttled by undervoltage. Bit 16: occurred since boot.
+val=$(( raw ))
+cur=$(( val & 0x1 ))
+past=$(( (val >> 16) & 0x1 ))
+
+if [[ "$cur" -eq 1 ]]; then
+  report_and_exit "$NAME" 1 "currently undervolted (raw=${raw})"
+elif [[ "$FAIL_ON_PAST_UNDERVOLT" -eq 1 && "$past" -eq 1 ]]; then
+  report_and_exit "$NAME" 1 "undervolted since boot (raw=${raw})"
 else
-  THROTTLED_RAW="$(vcgencmd get_throttled 2>&1 || true)"
-  if ! echo "$THROTTLED_RAW" | grep -qE '^throttled=0x[0-9a-fA-F]+$'; then
-    ERRORS+=("unexpected vcgencmd output: ${THROTTLED_RAW}")
-  else
-    THROTTLED_HEX="${THROTTLED_RAW#throttled=}"
-    THROTTLED_DEC="$(printf '%d' "${THROTTLED_HEX}")"
-    if (( THROTTLED_DEC & 0x1 )); then
-      ERRORS+=("under-voltage now (${THROTTLED_RAW})")
-    fi
-  fi
+  report_and_exit "$NAME" 0 "throttled=${raw}"
 fi
-
-if (( ${#ERRORS[@]} > 0 )); then
-  MSG="$(IFS='; '; echo "${ERRORS[*]}")"
-  curl -fsS -m 10 -G \
-    --data-urlencode "status=down" \
-    --data-urlencode "msg=${MSG}" \
-    "$KUMA_URL" >/dev/null || true
-  echo "FAIL: ${MSG}"
-  exit 1
-fi
-
-curl -fsS -m 10 -G \
-  --data-urlencode "status=up" \
-  --data-urlencode "msg=OK" \
-  "$KUMA_URL" >/dev/null || true
-echo "OK"
-exit 0

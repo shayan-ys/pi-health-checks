@@ -1,41 +1,33 @@
-#!/usr/bin/env bash
-# Health check: argononed systemd service + I2C fan controller device.
-# Pushes heartbeat to Uptime Kuma every run. Kuma owns alerting via ntfy.
-set -uo pipefail
+#!/bin/bash
+# check-argononed — Pi only. Verify argononed service running + I2C 0x1a present.
+#   I2C_BUS        default 1
+#   I2C_ADDR       default 0x1a
+#   KUMA_PUSH_URL  optional
+# If running on a non-Pi host (no i2cdetect), exits 0 with a "skipped" log line.
 
-KUMA_TOKEN="8F0eYpcMVi13OHEc4LkVmAfSPWRXMcLS"
-KUMA_URL="http://kuma.example:3001/api/push/${KUMA_TOKEN}"
-I2CDETECT="/usr/sbin/i2cdetect"
+set -euo pipefail
+NAME=check-argononed
+LIB="$(dirname "$0")/../lib/pi-health.sh"
+[[ -r /usr/local/lib/pi-health/pi-health.sh ]] && LIB=/usr/local/lib/pi-health/pi-health.sh
+# shellcheck source=../lib/pi-health.sh
+. "$LIB"
 
-ERRORS=()
+load_env "$NAME"
+I2C_BUS="${I2C_BUS:-1}"
+I2C_ADDR="${I2C_ADDR:-0x1a}"
 
-SERVICE_STATE="$(systemctl is-active argononed 2>&1 || true)"
-if [[ "$SERVICE_STATE" != "active" ]]; then
-  ERRORS+=("argononed not active (${SERVICE_STATE})")
+if ! command -v i2cdetect >/dev/null 2>&1; then
+  log "$NAME" "skipped (i2cdetect not present — not a Pi or i2c-tools missing)"
+  exit 0
 fi
 
-if [[ ! -x "$I2CDETECT" ]]; then
-  ERRORS+=("${I2CDETECT} missing or not executable")
-else
-  I2C_OUTPUT="$("$I2CDETECT" -y -q 1 2>&1 || true)"
-  if ! echo "$I2C_OUTPUT" | grep -q ' 1a '; then
-    ERRORS+=("I2C device 0x1a not found on bus 1")
-  fi
+if ! systemctl is-active --quiet argononed.service 2>/dev/null; then
+  report_and_exit "$NAME" 1 "argononed.service not active"
 fi
 
-if (( ${#ERRORS[@]} > 0 )); then
-  MSG="$(IFS='; '; echo "${ERRORS[*]}")"
-  curl -fsS -m 10 -G \
-    --data-urlencode "status=down" \
-    --data-urlencode "msg=${MSG}" \
-    "$KUMA_URL" >/dev/null || true
-  echo "FAIL: ${MSG}"
-  exit 1
+# i2cdetect returns "1a" in its grid when the device is present.
+addr_short="${I2C_ADDR#0x}"
+if ! i2cdetect -y "$I2C_BUS" 2>/dev/null | grep -qi "\b${addr_short}\b"; then
+  report_and_exit "$NAME" 1 "I2C ${I2C_ADDR} not present on bus ${I2C_BUS}"
 fi
-
-curl -fsS -m 10 -G \
-  --data-urlencode "status=up" \
-  --data-urlencode "msg=OK" \
-  "$KUMA_URL" >/dev/null || true
-echo "OK"
-exit 0
+report_and_exit "$NAME" 0 "argononed up, I2C ${I2C_ADDR} present"

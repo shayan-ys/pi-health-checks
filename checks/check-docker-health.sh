@@ -1,75 +1,34 @@
-#!/usr/bin/env bash
-# Health check: all Docker containers healthy/running.
-# Checks main (~/docker), monitoring (~/docker/monitoring), and homepage (~/docker/homepage) stacks.
-# Pushes heartbeat to Uptime Kuma every run. Kuma owns alerting via ntfy.
-# UP   if every container State=running and Status does not contain "(unhealthy)"
-# DOWN if Docker daemon is unreachable, no containers found, or any container is exited/unhealthy/restarting
-set -uo pipefail
+#!/bin/bash
+# check-docker-health — daemon reachable + no exited/unhealthy containers.
+#   IGNORE_NAMES   regex of container names to ignore (default empty)
+#   KUMA_PUSH_URL  optional
 
-CONFIG="/etc/pi-health/check-docker-health.env"
-LOG="/var/log/pi-health/check-docker-health.log"
-TS="$(date '+%Y-%m-%dT%H:%M:%S')"
+set -euo pipefail
+NAME=check-docker-health
+LIB="$(dirname "$0")/../lib/pi-health.sh"
+[[ -r /usr/local/lib/pi-health/pi-health.sh ]] && LIB=/usr/local/lib/pi-health/pi-health.sh
+# shellcheck source=../lib/pi-health.sh
+. "$LIB"
 
-if [[ ! -f "$CONFIG" ]]; then
-  echo "${TS} ERROR: config not found at ${CONFIG}" >> "$LOG"
-  exit 1
-fi
-source "$CONFIG"
+load_env "$NAME"
+IGNORE_NAMES="${IGNORE_NAMES:-}"
 
-# Guard: if Docker daemon is unreachable, push DOWN immediately
 if ! docker info >/dev/null 2>&1; then
-  curl -fsS -m 10 -G \
-    --data-urlencode "status=down" \
-    --data-urlencode "msg=docker-daemon-unreachable" \
-    "$KUMA_PUSH_URL" >/dev/null || true
-  echo "${TS} DOWN: docker-daemon-unreachable" >> "$LOG"
-  exit 1
+  report_and_exit "$NAME" 1 "docker daemon unreachable"
 fi
 
-BAD_CONTAINERS=()
-ALL_CONTAINERS=""
+# Find unhealthy or exited containers (excluding "exited (0)" — clean shutdown).
+bad=$(docker ps -a --filter "status=exited" --filter "status=unhealthy" \
+  --format '{{.Names}}\t{{.Status}}' \
+  | awk -F'\t' '$2 !~ /Exited \(0\)/ {print}' \
+  || true)
 
-# Get ALL containers (including exited/stopped): name, state, status
-while IFS=$'\t' read -r name state status; do
-  [[ -z "$name" ]] && continue
-  ALL_CONTAINERS="${ALL_CONTAINERS}${name}"
-  # Skip containers in "created" state (haven't started yet, not a failure)
-  if [[ "$state" == "created" ]]; then
-    continue
-  fi
-  # Flag bad states
-  if [[ "$state" == "exited" || "$state" == "restarting" ]]; then
-    BAD_CONTAINERS+=("${name}(${state})")
-    continue
-  fi
-  # Flag unhealthy running containers
-  if [[ "$state" == "running" && "$status" == *"(unhealthy)"* ]]; then
-    BAD_CONTAINERS+=("${name}(unhealthy)")
-    continue
-  fi
-done < <(docker ps -a --format '{{.Names}}\t{{.State}}\t{{.Status}}' 2>/dev/null || true)
-
-# Guard: if no containers found at all, cluster is down
-if [[ -z "$ALL_CONTAINERS" ]]; then
-  curl -fsS -m 10 -G \
-    --data-urlencode "status=down" \
-    --data-urlencode "msg=no containers found / docker unreachable" \
-    "$KUMA_PUSH_URL" >/dev/null || true
-  echo "${TS} DOWN: no containers found / docker unreachable" >> "$LOG"
-  exit 1
+if [[ -n "$IGNORE_NAMES" ]]; then
+  bad=$(echo "$bad" | grep -Ev "^(${IGNORE_NAMES})\b" || true)
 fi
 
-if (( ${#BAD_CONTAINERS[@]} > 0 )); then
-  STATUS="down"
-  MSG="$(IFS=','; echo "${BAD_CONTAINERS[*]}")"
+if [[ -n "$bad" ]]; then
+  report_and_exit "$NAME" 1 "unhealthy/exited: $(echo "$bad" | tr '\n' ';' | head -c 200)"
 else
-  STATUS="up"
-  MSG="OK"
+  report_and_exit "$NAME" 0 "all containers healthy"
 fi
-
-curl -fsS -m 10 -G \
-  --data-urlencode "status=${STATUS}" \
-  --data-urlencode "msg=${MSG}" \
-  "$KUMA_PUSH_URL" >/dev/null || true
-
-echo "${TS} ${STATUS^^}: ${MSG}" >> "$LOG"

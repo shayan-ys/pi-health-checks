@@ -21,7 +21,7 @@ set_temp() { echo "${1}000" > "$PI_HEALTH_TEMP_FILE"; }
 
 @test "passes when temp is low (50C) regardless of duty" {
   set_temp 50
-  mock_set argonone-cli "Speed: 0%" 0
+  mock_set argonone-cli "Fan Status OFF Speed 0%" 0
   run run_check check-fan-thermal.sh
   assert_success
   assert_output --partial "OK"
@@ -29,7 +29,7 @@ set_temp() { echo "${1}000" > "$PI_HEALTH_TEMP_FILE"; }
 
 @test "fails when temp is 65C and duty is 0 (daemon not kicking fan)" {
   set_temp 65
-  mock_set argonone-cli "Speed: 0%" 0
+  mock_set argonone-cli "Fan Status OFF Speed 0%" 0
   run run_check check-fan-thermal.sh
   assert_failure
   assert_output --partial "duty=0"
@@ -37,7 +37,7 @@ set_temp() { echo "${1}000" > "$PI_HEALTH_TEMP_FILE"; }
 
 @test "fails when temp is 70C and duty is 80% (fan on but Pi still hot)" {
   set_temp 70
-  mock_set argonone-cli "Speed: 80%" 0
+  mock_set argonone-cli "Fan Status ON Speed 80%" 0
   run run_check check-fan-thermal.sh
   assert_failure
   assert_output --partial "duty=80"
@@ -45,7 +45,7 @@ set_temp() { echo "${1}000" > "$PI_HEALTH_TEMP_FILE"; }
 
 @test "passes when temp is 64C (just below threshold) even with duty=0" {
   set_temp 64
-  mock_set argonone-cli "Speed: 0%" 0
+  mock_set argonone-cli "Fan Status OFF Speed 0%" 0
   run run_check check-fan-thermal.sh
   assert_success
 }
@@ -58,7 +58,7 @@ set_temp() { echo "${1}000" > "$PI_HEALTH_TEMP_FILE"; }
 exit 0
 EOF
   chmod +x "$MOCK_BIN/systemctl"
-  mock_set argonone-cli "Speed: 80%" 0
+  mock_set argonone-cli "Fan Status ON Speed 80%" 0
   run run_check check-fan-thermal.sh
   assert_success
   assert_output --partial "deferring"
@@ -81,7 +81,7 @@ EOF
 
 @test "passes (ramping) when temp is 67C and duty is in 1-19% grace window" {
   set_temp 67
-  mock_set argonone-cli "Speed: 10%" 0
+  mock_set argonone-cli "Fan Status ON Speed 10%" 0
   run run_check check-fan-thermal.sh
   assert_success
   assert_output --partial "ramping"

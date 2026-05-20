@@ -73,18 +73,20 @@ EOF
   [ -z "$(cat "$BATS_TEST_TMPDIR/out")" ]
 }
 
-@test "read_argon_duty_pct returns integer from --decode output" {
-  mock_set argonone-cli "Fan Status: ON
-Speed: 55%
-System Temperature: 62 C" 0
+@test "read_argon_duty_pct returns integer from --decode output (real format)" {
+  mock_set argonone-cli ">> DECODEING MEMORY <<
+Fan Status ON Speed 55%
+System Temperature 62°
+Fan Mode [ AUTO ]" 0
   . lib/pi-health.sh
   result=$(read_argon_duty_pct)
   [ "$result" = "55" ]
 }
 
 @test "read_argon_duty_pct returns 0 when fan is OFF" {
-  mock_set argonone-cli "Fan Status: OFF
-Speed: 0%" 0
+  mock_set argonone-cli ">> DECODEING MEMORY <<
+Fan Status OFF Speed 0%
+System Temperature 43°" 0
   . lib/pi-health.sh
   result=$(read_argon_duty_pct)
   [ "$result" = "0" ]

@@ -16,7 +16,7 @@ fi
 PURGE=0
 [[ "${1:-}" == "--purge" ]] && PURGE=1
 
-ALL_CHECKS=(disk mountpoint docker-health nordvpn dmesg-io argononed undervoltage)
+ALL_CHECKS=(disk mountpoint docker-health nordvpn dmesg-io argononed undervoltage fan-thermal thermal-emergency pi-heartbeat)
 
 # Remove scripts and lib
 for c in "${ALL_CHECKS[@]}"; do
@@ -32,7 +32,7 @@ strip_cron_lines() {
     local tmp
     tmp="$(mktemp)"
     crontab -u "$user" -l 2>/dev/null \
-      | grep -vE '/usr/local/bin/check-(disk|mountpoint|docker-health|nordvpn|dmesg-io|argononed|undervoltage)\.sh' \
+      | grep -vE '/usr/local/bin/check-(disk|mountpoint|docker-health|nordvpn|dmesg-io|argononed|undervoltage|fan-thermal|thermal-emergency|pi-heartbeat)\.sh' \
       > "$tmp" || true
     crontab -u "$user" - < "$tmp"
     rm -f "$tmp"

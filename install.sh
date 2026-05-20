@@ -22,7 +22,7 @@ INTERACTIVE=1
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-ALL_CHECKS=(disk mountpoint docker-health nordvpn dmesg-io argononed undervoltage)
+ALL_CHECKS=(disk mountpoint docker-health nordvpn dmesg-io argononed undervoltage fan-thermal thermal-emergency pi-heartbeat)
 PI_ONLY=(argononed undervoltage)
 
 # Pick checks

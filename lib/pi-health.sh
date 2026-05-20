@@ -30,23 +30,15 @@ log() {
 
 # Push to Kuma (or any push monitor accepting GET-with-?status=&msg=).
 # No-op if KUMA_PUSH_URL is unset/empty — runs the check as exit-code-only.
-# Args: <up|down> [msg]
+# Args: <up|down> <msg> [ping]
 kuma_push() {
-  local status="$1"; shift
-  local msg="${*:-OK}"
+  local status="$1"
+  local msg="${2:-OK}"
+  local ping="${3:-}"
   [[ -z "${KUMA_PUSH_URL:-}" ]] && return 0
-  # Append status + msg as URL params. Kuma accepts both GET and POST.
-  local sep="?"
-  [[ "$KUMA_PUSH_URL" == *"?"* ]] && sep="&"
-  curl -fsS -m 10 \
-    --data-urlencode "status=${status}" \
-    --data-urlencode "msg=${msg}" \
-    -G "${KUMA_PUSH_URL}${sep%?}" >/dev/null 2>&1 \
-    || curl -fsS -m 10 -G \
-       --data-urlencode "status=${status}" \
-       --data-urlencode "msg=${msg}" \
-       "${KUMA_PUSH_URL}" >/dev/null 2>&1 \
-    || return 0   # Push failures are not check failures.
+  local args=( --data-urlencode "status=${status}" --data-urlencode "msg=${msg}" )
+  [[ -n "$ping" ]] && args+=( --data-urlencode "ping=${ping}" )
+  curl -fsS -m 10 -G "${args[@]}" "${KUMA_PUSH_URL}" >/dev/null 2>&1 || return 0
 }
 
 # Exit 0 = up, 1 = down. Always pushes if KUMA_PUSH_URL is set.

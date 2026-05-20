@@ -32,3 +32,30 @@ setup() { setup_pi_health; }
   run bash -c '. lib/pi-health.sh && report_and_exit foo 1 "fail"'
   [ "$status" -eq 1 ]
 }
+
+@test "kuma_push includes ping= when third arg given" {
+  KUMA_PUSH_URL="http://kuma.test/push/abc"
+  # Capture curl args by replacing curl with a recording mock
+  cat > "$MOCK_BIN/curl" <<'EOF'
+#!/bin/bash
+echo "$@" > "$MOCK_BIN/.curl.args"
+exit 0
+EOF
+  chmod +x "$MOCK_BIN/curl"
+  . "$BATS_TEST_DIRNAME/../../lib/pi-health.sh"
+  kuma_push up "OK temp=58" 58
+  grep -q "ping=58" "$MOCK_BIN/.curl.args"
+}
+
+@test "kuma_push omits ping= when only two args" {
+  KUMA_PUSH_URL="http://kuma.test/push/abc"
+  cat > "$MOCK_BIN/curl" <<'EOF'
+#!/bin/bash
+echo "$@" > "$MOCK_BIN/.curl.args"
+exit 0
+EOF
+  chmod +x "$MOCK_BIN/curl"
+  . "$BATS_TEST_DIRNAME/../../lib/pi-health.sh"
+  kuma_push up "OK"
+  ! grep -q "ping=" "$MOCK_BIN/.curl.args"
+}

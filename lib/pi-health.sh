@@ -41,6 +41,15 @@ kuma_push() {
   curl -fsS -m 10 -G "${args[@]}" "${KUMA_PUSH_URL}" >/dev/null 2>&1 || return 0
 }
 
+# Read current commanded fan duty % from argonone-cli (DarkElvenAngel fork).
+# Empty string if argonone-cli not installed or output unparseable.
+read_argon_duty_pct() {
+  command -v argonone-cli >/dev/null 2>&1 || return 0
+  local out
+  out=$(argonone-cli --decode 2>/dev/null) || return 0
+  echo "$out" | awk -F'[: %]+' '/^Speed:/ {print $2; exit}'
+}
+
 # Read CPU temperature in whole degrees C. Empty string if source unreadable.
 # Override source file via PI_HEALTH_TEMP_FILE (tests use this).
 read_cpu_temp_c() {

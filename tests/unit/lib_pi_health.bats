@@ -72,3 +72,27 @@ EOF
     bash -c '. lib/pi-health.sh; read_cpu_temp_c' > "$BATS_TEST_TMPDIR/out"
   [ -z "$(cat "$BATS_TEST_TMPDIR/out")" ]
 }
+
+@test "read_argon_duty_pct returns integer from --decode output" {
+  mock_set argonone-cli "Fan Status: ON
+Speed: 55%
+System Temperature: 62 C" 0
+  . lib/pi-health.sh
+  result=$(read_argon_duty_pct)
+  [ "$result" = "55" ]
+}
+
+@test "read_argon_duty_pct returns 0 when fan is OFF" {
+  mock_set argonone-cli "Fan Status: OFF
+Speed: 0%" 0
+  . lib/pi-health.sh
+  result=$(read_argon_duty_pct)
+  [ "$result" = "0" ]
+}
+
+@test "read_argon_duty_pct returns empty when argonone-cli not present" {
+  rm -f "$MOCK_BIN/argonone-cli"
+  . lib/pi-health.sh
+  result=$(read_argon_duty_pct)
+  [ -z "$result" ]
+}

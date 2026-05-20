@@ -16,7 +16,7 @@ setup_pi_health() {
 
   # Each mock reads its programmed behavior from $MOCK_BIN/.<name>.{out,rc}
   # Set defaults: rc=0, no output.
-  for tool in df docker nordvpn dmesg vcgencmd i2cdetect curl mountpoint; do
+  for tool in df docker nordvpn dmesg vcgencmd i2cdetect curl mountpoint argonone-cli; do
     : > "$MOCK_BIN/.${tool}.out"
     echo 0 > "$MOCK_BIN/.${tool}.rc"
   done

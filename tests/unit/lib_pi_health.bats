@@ -59,3 +59,16 @@ EOF
   kuma_push up "OK"
   ! grep -q "ping=" "$MOCK_BIN/.curl.args"
 }
+
+@test "read_cpu_temp_c reads from PI_HEALTH_TEMP_FILE override" {
+  echo "67234" > "$BATS_TEST_TMPDIR/fake_temp"
+  PI_HEALTH_TEMP_FILE="$BATS_TEST_TMPDIR/fake_temp" \
+    bash -c '. lib/pi-health.sh; read_cpu_temp_c' > "$BATS_TEST_TMPDIR/out"
+  [ "$(cat "$BATS_TEST_TMPDIR/out")" = "67" ]
+}
+
+@test "read_cpu_temp_c returns empty when source file missing" {
+  PI_HEALTH_TEMP_FILE="$BATS_TEST_TMPDIR/nonexistent" \
+    bash -c '. lib/pi-health.sh; read_cpu_temp_c' > "$BATS_TEST_TMPDIR/out"
+  [ -z "$(cat "$BATS_TEST_TMPDIR/out")" ]
+}

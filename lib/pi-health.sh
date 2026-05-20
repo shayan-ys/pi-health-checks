@@ -41,6 +41,17 @@ kuma_push() {
   curl -fsS -m 10 -G "${args[@]}" "${KUMA_PUSH_URL}" >/dev/null 2>&1 || return 0
 }
 
+# Read CPU temperature in whole degrees C. Empty string if source unreadable.
+# Override source file via PI_HEALTH_TEMP_FILE (tests use this).
+read_cpu_temp_c() {
+  local src="${PI_HEALTH_TEMP_FILE:-/sys/class/thermal/thermal_zone0/temp}"
+  [[ -r "$src" ]] || return 0
+  local mc
+  mc=$(cat "$src" 2>/dev/null)
+  [[ "$mc" =~ ^[0-9]+$ ]] || return 0
+  echo $(( mc / 1000 ))
+}
+
 # Exit 0 = up, 1 = down. Always pushes if KUMA_PUSH_URL is set.
 report_and_exit() {
   local name="$1" rc="$2" msg="$3"

@@ -78,3 +78,20 @@ EOF
   assert_success
   assert_output --partial "skipped"
 }
+
+@test "passes (ramping) when temp is 67C and duty is in 1-19% grace window" {
+  set_temp 67
+  mock_set argonone-cli "Speed: 10%" 0
+  run run_check check-fan-thermal.sh
+  assert_success
+  assert_output --partial "ramping"
+}
+
+@test "degrades to temp-only failure when systemctl is absent and CPU is hot" {
+  rm -f "$MOCK_BIN/systemctl"
+  rm -f "$MOCK_BIN/argonone-cli"
+  set_temp 70
+  run run_check check-fan-thermal.sh
+  assert_failure
+  assert_output --partial "no daemon-cli"
+}

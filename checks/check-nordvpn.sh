@@ -1,6 +1,16 @@
 #!/bin/bash
-# check-nordvpn — NordVPN Meshnet enabled and at least MIN_PEERS peers visible.
-#   MIN_PEERS      default 1
+# check-nordvpn — NordVPN Meshnet up, verified via the kernel data plane.
+#
+# Rather than shelling out to `nordvpn meshnet peer list`, this probes the
+# WireGuard interface directly. The CLI talks to the nordvpnd daemon over a
+# unix control socket (/run/nordvpn/nordvpnd.sock) that can transiently vanish
+# when nordvpnd auto-restarts (e.g. a package upgrade), even while the data
+# plane — the kernel `nordlynx` interface — stays fully up. Probing the CLI
+# therefore produces false-DOWN alerts. We instead assert that the interface
+# exists, is up, and carries a Meshnet (100.64.0.0/10) address. This is purely
+# local: no external reachability ping, so no external-dependency false alarms.
+#
+#   IFACE          interface to probe (default nordlynx)
 #   KUMA_PUSH_URL  optional
 
 set -euo pipefail
@@ -11,27 +21,27 @@ LIB="$(dirname "$0")/../lib/pi-health.sh"
 . "$LIB"
 
 load_env "$NAME"
-MIN_PEERS="${MIN_PEERS:-1}"
+IFACE="${IFACE:-nordlynx}"
 
-if ! command -v nordvpn >/dev/null 2>&1; then
-  report_and_exit "$NAME" 1 "nordvpn binary not found"
-fi
-
-# Detection: `nordvpn meshnet peer list` succeeds only when Meshnet is on and
-# the daemon is reachable. NordVPN 4.x removed the `meshnet status` subcommand,
-# so we use peer-list output as a single source of truth.
-peer_out=$(nordvpn meshnet peer list 2>&1 || true)
-if echo "$peer_out" | grep -qiE 'meshnet is (off|disabled|not enabled)|not logged in|daemon is not'; then
-  report_and_exit "$NAME" 1 "Meshnet not enabled"
-fi
-if ! echo "$peer_out" | grep -qiE '^This device:|^Hostname:'; then
-  report_and_exit "$NAME" 1 "nordvpn peer list returned unexpected output"
+if ! command -v ip >/dev/null 2>&1; then
+  report_and_exit "$NAME" 1 "ip binary not found"
 fi
 
-# Peer count: each peer prints a "Hostname:" line. Subtract 1 for "This device".
-total_hosts=$(echo "$peer_out" | grep -ciE '^Hostname:' || true)
-peers=$(( total_hosts > 0 ? total_hosts - 1 : 0 ))
-if [[ "$peers" -lt "$MIN_PEERS" ]]; then
-  report_and_exit "$NAME" 1 "peers=${peers} < min=${MIN_PEERS}"
+# Signal 1: the interface exists and is up. WireGuard interfaces report
+# operstate UNKNOWN (never UP), so both UP and UNKNOWN count as healthy.
+link_out=$(ip -o link show "$IFACE" 2>/dev/null || true)
+if [[ -z "$link_out" ]]; then
+  report_and_exit "$NAME" 1 "Meshnet down: $IFACE interface missing"
 fi
-report_and_exit "$NAME" 0 "Meshnet up, peers=${peers}"
+if ! echo "$link_out" | grep -qE 'state (UP|UNKNOWN)'; then
+  state=$(echo "$link_out" | grep -oE 'state [A-Z]+' | awk '{print $2}' | head -n1)
+  report_and_exit "$NAME" 1 "Meshnet down: $IFACE state ${state:-unknown}"
+fi
+
+# Signal 2: a Meshnet address (100.64.0.0/10) is bound to the interface.
+addr_out=$(ip -4 addr show "$IFACE" 2>/dev/null || true)
+if ! echo "$addr_out" | grep -qE 'inet 100\.'; then
+  report_and_exit "$NAME" 1 "Meshnet down: no 100.x address on $IFACE"
+fi
+
+report_and_exit "$NAME" 0 "Meshnet up ($IFACE, 100.x bound)"

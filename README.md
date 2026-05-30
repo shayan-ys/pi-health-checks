@@ -1,8 +1,8 @@
 # pi-health-checks
 
-> Ten small bash health-check scripts (disk, mountpoint, docker, nordvpn,
-> dmesg-io, argonone-fan, undervoltage, fan-thermal, thermal-emergency,
-> pi-heartbeat) driven by cron, pushing heartbeats to
+> Eleven small bash health-check scripts (disk, mountpoint, docker, nordvpn,
+> meshnet-routing, dmesg-io, argonone-fan, undervoltage, fan-thermal,
+> thermal-emergency, pi-heartbeat) driven by cron, pushing heartbeats to
 > [Uptime Kuma](https://github.com/louislam/uptime-kuma) push monitors.
 > No daemon, no agent, no Python — just bash + cron + curl.
 
@@ -11,9 +11,10 @@
 Each script is a single ~30-line bash file that:
 1. Reads its config from `/etc/pi-health/<name>.env`.
 2. Runs one specific check (filesystem usage, mount liveness, docker daemon
-   health, NordVPN Meshnet status + peer count, fresh dmesg I/O errors,
-   argonone fan controller health via `systemctl is-active argononed`,
-   Pi undervoltage, fan-vs-thermal mismatch, thermal-emergency, CPU heartbeat).
+   health, NordVPN Meshnet status + peer count, Meshnet peer routing
+   permissions, fresh dmesg I/O errors, argonone fan controller health via
+   `systemctl is-active argononed`, Pi undervoltage, fan-vs-thermal mismatch,
+   thermal-emergency, CPU heartbeat).
 3. Logs to `/var/log/pi-health/<name>.log`.
 4. Optionally `curl`s a `KUMA_PUSH_URL` heartbeat (`?status=up&msg=...` or
    `?status=down&msg=...`). If the URL is unset, the check is exit-code-only.
@@ -30,6 +31,7 @@ flips DOWN if a heartbeat doesn't arrive within the configured grace period.
 | `check-mountpoint` | Confirms a path is a live mount | No |
 | `check-docker-health` | Docker daemon responsive + all containers healthy | No |
 | `check-nordvpn` | NordVPN Meshnet active, peer count ≥ `MIN_PEERS` | No |
+| `check-meshnet-routing` | Every Meshnet peer has routing permission so it can reach Docker-published services. With `ALLOW_ALL_PEERS_ROUTING=true`, self-heals by granting it (new peers default to routing-disabled). | No |
 | `check-dmesg-io` | Fresh I/O errors in dmesg since last run (state-dedup) | No |
 | `check-argononed` | Checks `systemctl is-active argononed` (bus-collision-free) | Yes |
 | `check-undervoltage` | `vcgencmd get_throttled` undervoltage bit | Yes |

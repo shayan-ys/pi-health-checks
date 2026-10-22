@@ -38,6 +38,7 @@ flips DOWN if a heartbeat doesn't arrive within the configured grace period.
 | `check-fan-thermal` | Alerts when daemon-reported fan state contradicts a hot CPU (temp ≥ `THRESHOLD_C` + duty=0 OR duty ≥ 20%). Recommended Kuma Retries=2. | Yes |
 | `check-thermal-emergency` | Fan-agnostic `THRESHOLD_C` (default 75°C) safety net. Recommended Kuma Retries=1. | No |
 | `check-pi-heartbeat` | Always-UP heartbeat with `ping=<cpu_temp>` for Kuma sparkline | No |
+| `check-backup-age` | Newest file matching `BACKUP_GLOB` is younger than `MAX_AGE_H` (default 36) | No |
 
 ## Why I wrote it
 
@@ -102,6 +103,23 @@ For each check you want surfaced in Kuma:
 You don't need to embed `?status=` or `?msg=` in the URL — the script appends
 them. Kuma's push monitor accepts both `up` and `down` and surfaces the
 attached `msg=` in the dashboard.
+
+## Push to Gatus instead
+
+The checks can also push to [Gatus](https://github.com/TwiN/gatus)
+[external endpoints](https://github.com/TwiN/gatus#external-endpoints). Put the
+shared settings in `/etc/pi-health/common.env` (mode 0640), or pass them to the
+installer as `GATUS_URL=... GATUS_TOKEN=... sudo -E ./install.sh`:
+
+```bash
+GATUS_URL=http://127.0.0.1:8080
+GATUS_TOKEN=<bearer token from the Gatus config>
+```
+
+Each check pushes to the key `host_<check name>`, so declare one external
+endpoint per check in Gatus with `group: host` and `name: check-<name>`. Set
+`GATUS_KEY=<group>_<name>` in a check's own env file to use another key.
+Kuma and Gatus pushes can run side by side; an unset target is skipped.
 
 ## Recommended Kuma Monitor Settings
 

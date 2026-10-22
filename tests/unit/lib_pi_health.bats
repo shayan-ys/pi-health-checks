@@ -98,3 +98,43 @@ System Temperature 43°" 0
   result=$(read_argon_duty_pct)
   [ -z "$result" ]
 }
+
+@test "gatus_push is a no-op without GATUS_URL and GATUS_TOKEN" {
+  unset GATUS_URL GATUS_TOKEN
+  cat > "$MOCK_BIN/curl" <<'M'
+#!/bin/bash
+echo "$@" > "$MOCK_BIN/.curl.args"
+M
+  chmod +x "$MOCK_BIN/curl"
+  . "$BATS_TEST_DIRNAME/../../lib/pi-health.sh"
+  gatus_push down "x"
+  [ ! -e "$MOCK_BIN/.curl.args" ]
+}
+
+@test "report_and_exit pushes failure to the Gatus key for the check" {
+  echo 'GATUS_URL=http://gatus.test:8085/' > "$PI_HEALTH_CONF_DIR/common.env"
+  echo 'GATUS_TOKEN=tok' >> "$PI_HEALTH_CONF_DIR/common.env"
+  cat > "$MOCK_BIN/curl" <<'M'
+#!/bin/bash
+printf '%s\n' "$@" > "$MOCK_BIN/.curl.args"
+M
+  chmod +x "$MOCK_BIN/curl"
+  run bash -c '. lib/pi-health.sh && load_env check-disk && report_and_exit check-disk 1 "disk full"'
+  [ "$status" -eq 1 ]
+  grep -qx "http://gatus.test:8085/api/v1/endpoints/host_check-disk/external" "$MOCK_BIN/.curl.args"
+  grep -qx "success=false" "$MOCK_BIN/.curl.args"
+  grep -qx "error=disk full" "$MOCK_BIN/.curl.args"
+  grep -qx "Authorization: Bearer tok" "$MOCK_BIN/.curl.args"
+}
+
+@test "GATUS_KEY overrides the default key" {
+  printf 'GATUS_URL=http://g\nGATUS_TOKEN=t\nGATUS_KEY=backup_opengym\n' > "$PI_HEALTH_CONF_DIR/common.env"
+  cat > "$MOCK_BIN/curl" <<'M'
+#!/bin/bash
+printf '%s\n' "$@" > "$MOCK_BIN/.curl.args"
+M
+  chmod +x "$MOCK_BIN/curl"
+  run bash -c '. lib/pi-health.sh && load_env x && report_and_exit x 0 ok'
+  grep -qx "http://g/api/v1/endpoints/backup_opengym/external" "$MOCK_BIN/.curl.args"
+  grep -qx "success=true" "$MOCK_BIN/.curl.args"
+}

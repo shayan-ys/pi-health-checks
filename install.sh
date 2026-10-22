@@ -1,6 +1,7 @@
 #!/bin/bash
 # install.sh — pick which checks to enable, install scripts + lib + env files,
-# write per-script Kuma push URLs to /etc/pi-health/<name>.env, append cron
+# write per-script push settings to /etc/pi-health/<name>.env (and shared Gatus
+# settings to /etc/pi-health/common.env), append cron
 # entries to the invoking user's crontab (or root for argonone/undervoltage).
 #
 # Idempotent: re-running upgrades scripts in place and adds missing cron lines.
@@ -9,6 +10,7 @@
 #   sudo ./install.sh                         # interactive
 #   sudo ./install.sh --non-interactive       # uses CHECKS env var
 #   CHECKS=disk,mountpoint,docker-health,nordvpn,dmesg-io sudo -E ./install.sh --non-interactive
+#   GATUS_URL=http://127.0.0.1:8085 GATUS_TOKEN=... CHECKS=... sudo -E ./install.sh --non-interactive
 
 set -euo pipefail
 
@@ -22,7 +24,7 @@ INTERACTIVE=1
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-ALL_CHECKS=(disk mountpoint docker-health nordvpn meshnet-routing dmesg-io argononed undervoltage fan-thermal thermal-emergency pi-heartbeat)
+ALL_CHECKS=(disk mountpoint docker-health nordvpn meshnet-routing dmesg-io argononed undervoltage fan-thermal thermal-emergency pi-heartbeat backup-age)
 PI_ONLY=(argononed undervoltage)
 
 # Pick checks
@@ -66,6 +68,16 @@ chown -R "$INVOKING_USER":"$INVOKING_USER" /var/log/pi-health /var/lib/pi-health
 
 # Install lib
 install -m 0644 "$SCRIPT_DIR/lib/pi-health.sh" /usr/local/lib/pi-health/pi-health.sh
+
+# Shared Gatus push settings. Written only when both values are given; the
+# token is readable by root and the invoking user only.
+if [[ -n "${GATUS_URL:-}" && -n "${GATUS_TOKEN:-}" ]]; then
+  umask_old=$(umask); umask 077
+  printf 'GATUS_URL=%s\nGATUS_TOKEN=%s\n' "$GATUS_URL" "$GATUS_TOKEN" > /etc/pi-health/common.env
+  umask "$umask_old"
+  chown root:"$INVOKING_USER" /etc/pi-health/common.env
+  chmod 0640 /etc/pi-health/common.env
+fi
 
 # Install each selected check
 for c in "${CHECKS[@]}"; do
@@ -112,5 +124,5 @@ done
 echo
 echo "Installed checks: ${CHECKS[*]}"
 echo "Cron entries added to user(s) and root as appropriate."
-echo "Edit /etc/pi-health/check-<name>.env to tune thresholds and Kuma URLs."
+echo "Edit /etc/pi-health/check-<name>.env to tune thresholds; push targets live in common.env (Gatus) or KUMA_PUSH_URL."
 echo "Logs: /var/log/pi-health/<name>.log"

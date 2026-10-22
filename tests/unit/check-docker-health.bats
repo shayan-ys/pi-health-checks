@@ -35,3 +35,10 @@ setup() { setup_pi_health; }
   IGNORE_NAMES='web' run run_check check-docker-health.sh
   assert_success
 }
+
+@test "IGNORE_NAMES from a quoted env file skips matching containers" {
+  printf 'IGNORE_NAMES="homepage|notes-dash"\n' > "$PI_HEALTH_CONF_DIR/check-docker-health.env"
+  mock_set docker $'homepage\tExited (1) 2 minutes ago' 0
+  run run_check check-docker-health.sh
+  assert_success
+}

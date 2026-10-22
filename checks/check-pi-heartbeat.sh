@@ -16,6 +16,6 @@ temp=$(read_cpu_temp_c)
 msg="alive temp=${temp:-?}C"
 
 log "$NAME" "OK: $msg"
-kuma_push up "$msg" "${temp:-}"
+push_status up "$msg" "${temp:-}"
 echo "OK: $msg"
 exit 0

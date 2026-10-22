@@ -10,12 +10,17 @@ PI_HEALTH_LOG_DIR="${PI_HEALTH_LOG_DIR:-/var/log/pi-health}"
 PI_HEALTH_STATE_DIR="${PI_HEALTH_STATE_DIR:-/var/lib/pi-health}"
 PI_HEALTH_CONF_DIR="${PI_HEALTH_CONF_DIR:-/etc/pi-health}"
 
-# Read /etc/pi-health/<name>.env if present.
+# Read /etc/pi-health/common.env, then /etc/pi-health/<name>.env, if present.
+# common.env holds settings shared by every check (GATUS_URL, GATUS_TOKEN).
 load_env() {
   local name="$1"
+  local common="${PI_HEALTH_CONF_DIR}/common.env"
   local conf="${PI_HEALTH_CONF_DIR}/${name}.env"
   # shellcheck disable=SC1090
+  [[ -r "$common" ]] && . "$common" || true
+  # shellcheck disable=SC1090
   [[ -r "$conf" ]] && . "$conf" || true
+  PI_HEALTH_NAME="$name"
 }
 
 # Append a timestamped line to /var/log/pi-health/<name>.log.
@@ -39,6 +44,30 @@ kuma_push() {
   local args=( --data-urlencode "status=${status}" --data-urlencode "msg=${msg}" )
   [[ -n "$ping" ]] && args+=( --data-urlencode "ping=${ping}" )
   curl -fsS -m 10 -G "${args[@]}" "${KUMA_PUSH_URL}" >/dev/null 2>&1 || return 0
+}
+
+# Push to a Gatus external endpoint.
+# No-op unless GATUS_URL and GATUS_TOKEN are set. The endpoint key defaults to
+# "host_<check name>" (Gatus group "host", endpoint name = check name).
+# Args: <up|down> <msg>
+gatus_push() {
+  local status="$1"
+  local msg="${2:-OK}"
+  [[ -z "${GATUS_URL:-}" || -z "${GATUS_TOKEN:-}" ]] && return 0
+  local key="${GATUS_KEY:-host_${PI_HEALTH_NAME:-unknown}}"
+  local success=true
+  [[ "$status" == "down" ]] && success=false
+  curl -fsS -m 10 -X POST -G \
+    -H "Authorization: Bearer ${GATUS_TOKEN}" \
+    --data-urlencode "success=${success}" \
+    --data-urlencode "error=${msg}" \
+    "${GATUS_URL%/}/api/v1/endpoints/${key}/external" >/dev/null 2>&1 || return 0
+}
+
+# Push a result to every configured backend.
+push_status() {
+  kuma_push "$@"
+  gatus_push "$1" "${2:-OK}"
 }
 
 # Read current commanded fan duty % from argonone-cli (DarkElvenAngel fork).
@@ -71,11 +100,11 @@ report_and_exit() {
   local name="$1" rc="$2" msg="$3"
   if [[ "$rc" -eq 0 ]]; then
     log "$name" "OK: $msg"
-    kuma_push up "$msg"
+    push_status up "$msg"
     echo "OK: $msg"
   else
     log "$name" "FAIL: $msg"
-    kuma_push down "$msg"
+    push_status down "$msg"
     echo "FAIL: $msg"
   fi
   exit "$rc"

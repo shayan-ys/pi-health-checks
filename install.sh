@@ -9,7 +9,7 @@
 # Usage:
 #   sudo ./install.sh                         # interactive
 #   sudo ./install.sh --non-interactive       # uses CHECKS env var
-#   CHECKS=disk,mountpoint,docker-health,nordvpn,dmesg-io sudo -E ./install.sh --non-interactive
+#   CHECKS=disk,mountpoint,docker-health,dmesg-io sudo -E ./install.sh --non-interactive
 #   GATUS_URL=http://127.0.0.1:8085 GATUS_TOKEN=... CHECKS=... sudo -E ./install.sh --non-interactive
 
 set -euo pipefail
@@ -24,7 +24,7 @@ INTERACTIVE=1
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-ALL_CHECKS=(disk mountpoint docker-health nordvpn meshnet-routing dmesg-io argononed undervoltage fan-thermal thermal-emergency pi-heartbeat backup-age)
+ALL_CHECKS=(disk mountpoint docker-health dmesg-io argononed undervoltage fan-thermal thermal-emergency pi-heartbeat backup-age)
 PI_ONLY=(argononed undervoltage)
 
 # Pick checks
